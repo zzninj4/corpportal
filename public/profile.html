@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Профиль пользователя - Корпоративный портал</title>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles/profile_style.css">
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <img src="./icons/logo.png" class="logo-png45">
+            <div class="header-text">
+                <h2>Панель управления</h2>
+                <h1>Профиль пользователя</h1>
+                <p>Ваши персональные данные</p>
+            </div>
+            <div class="user-menu" id="userMenu">
+                <div class="user-avatar" id="userAvatar"></div>
+                <div class="user-name" id="userName"></div>
+                <a href="#" class="logout-button" onclick="logout(event)">Выйти</a>
+            </div>
+        </div>
+    </header>
+    <nav>
+        <ul id="navList">
+            <li><a href="./indexmain.html">Главная</a></li>
+            <li><a href="./files.html">Файловый менеджер</a></li>
+            <li><a href="./chat.html">Чат</a></li>
+        </ul>
+    </nav>
+    <div class="container">
+        <div class="profile-card">
+            <h1>Ваш профиль</h1>
+            <p><strong>Логин:</strong> <span id="profileUsername"></span></p>
+            <p><strong>Имя:</strong> <span id="profileName"></span></p>
+            <p><strong>Фамилия:</strong> <span id="profileSurname"></span></p>
+            <p><strong>Номер телефона:</strong> <span id="profileNumber"></span></p>
+            <p><strong>Роль:</strong> <span id="profileRole"></span></p>
+            <p class="error" id="profileError"></p>
+        </div>
+    </div>
+    <footer>
+        <p>© 2025 Корпоративный портал управления. Все права защищены.</p>
+        <p>Доступ разрешён только сотрудникам организации.</p>
+    </footer>
+    <script>
+        window.onload = () => {
+            displayUserInfo();
+            checkAdminAccess();
+            // Добавляем обработчик клика на userMenu
+            document.getElementById('userMenu').addEventListener('click', (event) => {
+                if (event.target.classList.contains('logout-button')) return; // Игнорируем клик по кнопке "Выйти"
+                window.location.href = './profile.html';
+            });
+        };
+
+        function displayUserInfo() {
+            const token = localStorage.getItem('token');
+            const userAvatar = document.getElementById('userAvatar');
+            const userName = document.getElementById('userName');
+            const profileUsername = document.getElementById('profileUsername');
+            const profileName = document.getElementById('profileName');
+            const profileSurname = document.getElementById('profileSurname');
+            const profileNumber = document.getElementById('profileNumber');
+            const profileRole = document.getElementById('profileRole');
+            const profileError = document.getElementById('profileError');
+
+            if (!token) {
+                console.error('Токен отсутствует, перенаправление на login.html');
+                window.location.href = '/login.html';
+                return;
+            }
+
+            fetch('/api/user', {
+                headers: { Authorization: `Bearer ${token}` }
+            })
+                .then((response) => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+                    return response.json();
+                })
+                .then((data) => {
+                    userAvatar.textContent = data.username.split(' ').map(word => word[0]).join('').slice(0, 2);
+                    userName.textContent = data.username;
+                    profileUsername.textContent = data.username;
+                    profileName.textContent = data.name || 'Не указано';
+                    profileSurname.textContent = data.surname || 'Не указано';
+                    profileNumber.textContent = data.number;
+                    profileRole.textContent = data.role === 'admin' ? 'Администратор' : 'Пользователь';
+                    profileError.style.display = 'none';
+                })
+                .catch((error) => {
+                    console.error('Ошибка загрузки профиля:', error);
+                    profileError.textContent = 'Ошибка загрузки данных профиля: ' + error.message;
+                    profileError.style.display = 'block';
+                    localStorage.removeItem('token');
+                    setTimeout(() => window.location.href = '/login.html', 1000);
+                });
+        }
+
+        function checkAdminAccess() {
+            const token = localStorage.getItem('token');
+            if (!token) return;
+            fetch('/api/check-admin', {
+                headers: { Authorization: `Bearer ${token}` }
+            })
+                .then((response) => {
+                    if (response.ok) {
+                        const adminLink = document.createElement('li');
+                        adminLink.innerHTML = '<a href="./admin.html">Админ-панель</a>';
+                        document.getElementById('navList').appendChild(adminLink);
+                    }
+                })
+                .catch((error) => console.error('Ошибка проверки прав администратора:', error));
+        }
+
+        function logout(event) {
+            event.stopPropagation(); // Предотвращаем всплытие события
+            localStorage.removeItem('token');
+            window.location.href = './login.html';
+        }
+    </script>
+</body>
+</html>

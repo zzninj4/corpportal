@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Админ-панель - Корпоративный портал</title>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles/admin_style.css">
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <img src="/public/icons/logo.png" class="logo-png45" alt="Logo">
+            <div class="header-text">
+                <h2>Панель управления</h2>
+                <h1>Админ-панель</h1>
+                <p>Панель администратора</p>
+            </div>
+            <div class="user-menu" id="userMenu">
+                <div class="user-avatar" id="userAvatar"></div>
+                <div class="user-name" id="userName"></div>
+                <a href="#" class="logout-button" onclick="logout(event)">Выйти</a>
+            </div>
+        </div>
+    </header>
+    <nav>
+        <ul id="navList">
+            <li><a href="/indexmain.html"><img src="/public/icons/home2.png" alt="Home Icon" style="width: 20px; height: 20px; vertical-align: middle; margin-right: 8px;">Главная</a></li>
+            <li><a href="/files.html"><img src="/public/icons/doc.png" alt="Files Icon" style="width: 20px; height: 20px; vertical-align: middle; margin-right: 8px;">Файловый менеджер</a></li>
+            <li><a href="/chat.html"><img src="/public/icons/chat.png" alt="Chat Icon" style="width: 20px; height: 20px; vertical-align: middle; margin-right: 8px;">Чат</a></li>
+            <li><a href="/admin.html"><img src="/public/icons/admin.png" alt="Admin Icon" style="width: 20px; height: 20px; vertical-align: middle; margin-right: 8px;">Админ-панель</a></li>
+        </ul>
+    </nav>
+    <div class="container">
+        <h1>Управление пользователями</h1>
+        <div class="add-user card">
+            <h2>Добавить нового пользователя</h2>
+            <p class="error" id="registerError"></p>
+            <form id="registerForm">
+                <div class="form-group">
+                    <label for="name">Имя</label>
+                    <input type="text" id="name" name="name" placeholder="Введите имя">
+                </div>
+                <div class="form-group">
+                    <label for="surname">Фамилия</label>
+                    <input type="text" id="surname" name="surname" placeholder="Введите фамилию">
+                </div>
+                <div class="form-group">
+                    <label for="username">Логин</label>
+                    <input type="text" id="username" name="username" required placeholder="Введите логин">
+                </div>
+                <div class="form-group">
+                    <label for="password">Пароль</label>
+                    <input type="password" id="password" name="password" required placeholder="Введите пароль">
+                </div>
+                <div class="form-group">
+                    <label for="number">Номер телефона</label>
+                    <input type="text" id="number" name="number" required placeholder="Введите номер телефона">
+                </div>
+                <button type="submit" class="btn"><img src="/public/icons/add-user.png" alt="Add User Icon">Зарегистрировать</button>
+            </form>
+        </div>
+        <div class="edit-user card">
+            <h2>Редактирование пользователя</h2>
+            <p class="error" id="editError"></p>
+            <form id="editUserForm">
+                <div class="form-group">
+                    <label for="editUserSelect">Выберите сотрудника</label>
+                    <select id="editUserSelect" name="userId" required>
+                        <option value="">Выберите сотрудника</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="editName">Имя</label>
+                    <input type="text" id="editName" name="name" placeholder="Введите имя">
+                </div>
+                <div class="form-group">
+                    <label for="editSurname">Фамилия</label>
+                    <input type="text" id="editSurname" name="surname" placeholder="Введите фамилию">
+                </div>
+                <div class="form-group">
+                    <label for="editUsername">Логин</label>
+                    <input type="text" id="editUsername" name="username" required placeholder="Введите логин">
+                </div>
+                <div class="form-group">
+                    <label for="editPassword">Пароль</label>
+                    <input type="password" id="editPassword" name="password" placeholder="Введите новый пароль (опционально)">
+                </div>
+                <div class="form-group">
+                    <label for="editNumber">Номер телефона</label>
+                    <input type="text" id="editNumber" name="number" required placeholder="Введите номер телефона">
+                </div>
+                <button type="submit" class="btn"><img src="/public/icons/save.png" alt="Save Icon">Сохранить изменения</button>
+            </form>
+        </div>
+        <div class="user-list card">
+            <h2>Список всех пользователей</h2>
+            <table class="user-table">
+                <thead>
+                    <tr>
+                        <th>Имя/Фамилия</th>
+                        <th>Логин</th>
+                        <th>Пароль</th>
+                        <th>Номер телефона</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody id="userTableBody"></tbody>
+            </table>
+        </div>
+    </div>
+    <div id="userMenuModal" class="modal">
+        <button class="delete" onclick="deleteUserFromModal()">Удалить пользователя</button>
+        <button onclick="featureInDevelopment()">В разработке</button>
+    </div>
+    <footer>
+        <p>© 2025 Корпоративный портал управления. Все права защищены.</p>
+        <p>Доступ разрешён только сотрудникам организации.</p>
+    </footer>
+    <script>
+        // Перехват fetch для добавления токена
+        const originalFetch = window.fetch;
+        window.fetch = async (url, options = {}) => {
+            const token = localStorage.getItem('token');
+            const headers = { ...options.headers, ...(token && { Authorization: `Bearer ${token}` }) };
+            return originalFetch(url, { ...options, headers });
+        };
+
+        window.onload = async () => {
+            const token = localStorage.getItem('token');
+            if (!token) {
+                console.error('Токен отсутствует, перенаправление на login.html');
+                setTimeout(() => window.location.href = '/login.html', 1000);
+                return;
+            }
+            try {
+                await Promise.all([displayUserInfo(), checkAdminAccess()]);
+                loadUsers();
+                // Добавляем обработчик клика на userMenu
+                document.getElementById('userMenu').addEventListener('click', (event) => {
+                    if (event.target.classList.contains('logout-button')) return; // Игнорируем клик по кнопке "Выйти"
+                    window.location.href = './profile.html';
+                });
+            } catch (error) {
+                console.error('Ошибка при загрузке страницы:', error);
+                setTimeout(() => window.location.href = '/login.html', 1000);
+            }
+        };
+
+        async function displayUserInfo() {
+            const token = localStorage.getItem('token');
+            const userAvatar = document.getElementById('userAvatar');
+            const userName = document.getElementById('userName');
+            if (!token) {
+                console.error('Токен отсутствует в displayUserInfo');
+                throw new Error('Токен отсутствует');
+            }
+            try {
+                const response = await fetch('/api/user');
+                if (!response.ok) {
+                    const text = await response.text();
+                    throw new Error(`Ошибка /api/user: HTTP ${response.status}: ${text}`);
+                }
+                const data = await response.json();
+                userAvatar.textContent = data.username.split(' ').map(word => word[0]).join('').slice(0, 2);
+                userName.textContent = data.username;
+            } catch (error) {
+                console.error('Ошибка в displayUserInfo:', error.message);
+                localStorage.removeItem('token');
+                throw error;
+            }
+        }
+
+        async function checkAdminAccess() {
+            const token = localStorage.getItem('token');
+            if (!token) {
+                console.error('Токен отсутствует в checkAdminAccess');
+                throw new Error('Токен отсутствует');
+            }
+            try {
+                const response = await fetch('/api/check-admin');
+                if (!response.ok) {
+                    const text = await response.text();
+                    throw new Error(`Ошибка /api/check-admin: HTTP ${response.status}: ${text}`);
+                }
+            } catch (error) {
+                console.error('Ошибка в checkAdminAccess:', error.message);
+                throw error;
+            }
+        }
+
+        function logout(event) {
+            event.stopPropagation(); // Предотвращаем всплытие события
+            localStorage.removeItem('token');
+            window.location.href = '/login.html';
+        }
+
+        let currentUserId = null;
+        const passwordCache = {};
+
+        function openUserMenu(userId, event) {
+            currentUserId = userId;
+            const modal = document.getElementById('userMenuModal');
+            const rect = event.target.getBoundingClientRect();
+            modal.style.top = `${rect.bottom + window.scrollY}px`;
+            modal.style.left = `${rect.left + window.scrollX}px`;
+            modal.style.display = 'block';
+            document.addEventListener('click', closeUserMenuOnClickOutside);
+        }
+
+        function closeUserMenu() {
+            const modal = document.getElementById('userMenuModal');
+            modal.style.display = 'none';
+            document.removeEventListener('click', closeUserMenuOnClickOutside);
+            currentUserId = null;
+        }
+
+        function closeUserMenuOnClickOutside(event) {
+            const modal = document.getElementById('userMenuModal');
+            if (!modal.contains(event.target) && !event.target.classList.contains('menu-icon')) {
+                closeUserMenu();
+            }
+        }
+
+        function deleteUserFromModal() {
+            if (currentUserId) {
+                deleteUser(currentUserId);
+                closeUserMenu();
+            }
+        }
+
+        function featureInDevelopment() {
+            alert('Функция в разработке');
+            closeUserMenu();
+        }
+
+        async function togglePassword(userId, element) {
+            const passwordText = element.previousElementSibling;
+            if (passwordText.textContent !== '****') {
+                passwordText.textContent = '****';
+                return;
+            }
+            if (!passwordCache[userId]) {
+                try {
+                    const response = await fetch(`/api/user/${userId}`);
+                    if (!response.ok) {
+                        const text = await response.text();
+                        throw new Error(`HTTP ${response.status}: ${text}`);
+                    }
+                    const user = await response.json();
+                    // ВРЕМЕННО: Предполагается, что API возвращает password в plaintext
+                    // В реальной системе пароль хеширован, нужен другой подход (например, временный токен)
+                    passwordCache[userId] = user.password || 'N/A';
+                } catch (error) {
+                    console.error('Error fetching password:', error);
+                    document.getElementById('editError').textContent = 'Ошибка загрузки пароля: ' + error.message;
+                    document.getElementById('editError').style.display = 'block';
+                    return;
+                }
+            }
+            passwordText.textContent = passwordCache[userId];
+        }
+
+        function loadUsers() {
+            fetch('/api/users')
+                .then(async (response) => {
+                    if (!response.ok) {
+                        const text = await response.text();
+                        throw new Error(`HTTP ${response.status}: ${text}`);
+                    }
+                    return response.json();
+                })
+                .then((users) => {
+                    const userTableBody = document.getElementById('userTableBody');
+                    const editUserSelect = document.getElementById('editUserSelect');
+                    userTableBody.innerHTML = '';
+                    editUserSelect.innerHTML = '<option value="">Выберите сотрудника</option>';
+
+                    // Фильтруем пользователей, исключая admin
+                    const nonAdminUsers = users.filter(user => user.username !== 'admin');
+
+                    // Заполняем таблицу
+                    if (nonAdminUsers.length === 0) {
+                        userTableBody.innerHTML = '<tr><td colspan="5" style="text-align: center;">Пользователи не найдены</td></tr>';
+                    } else {
+                        nonAdminUsers.forEach((user) => {
+                            const row = document.createElement('tr');
+                            row.innerHTML = `
+                                <td>${user.name || 'безымянный'} ${user.surname || ''}</td>
+                                <td>${user.username}</td>
+                                <td><span class="password-text" data-user-id="${user.id}">****</span><span class="eye-icon" onclick="togglePassword('${user.id}', this)">👁️</span></td>
+                                <td>${user.number}</td>
+                                <td><span class="menu-icon" onclick="openUserMenu('${user.id}', event)">⋮</span></td>
+                            `;
+                            userTableBody.appendChild(row);
+                        });
+                    }
+
+                    // Заполняем выпадающий список, исключая admin
+                    nonAdminUsers.forEach((user) => {
+                        const option = document.createElement('option');
+                        option.value = user.id;
+                        // Отображаем имя и фамилию, убираем лишние пробелы
+                        const displayName = `${user.name || ''} ${user.surname || ''}`.trim() || user.username;
+                        option.textContent = displayName;
+                        editUserSelect.appendChild(option);
+                    });
+                })
+                .catch((error) => {
+                    console.error('Error loading users:', error);
+                    const errorMessage = error.message.includes('401') ? 'Токен недействителен. Пожалуйста, войдите снова.' :
+                                  error.message.includes('403') ? 'Доступ запрещён: требуется роль администратора.' :
+                                  'Ошибка загрузки пользователей: ' + error.message;
+                    document.getElementById('editError').textContent = errorMessage;
+                    document.getElementById('editError').style.display = 'block';
+                    if (error.message.includes('401')) {
+                        localStorage.removeItem('token');
+                        setTimeout(() => window.location.href = '/login.html', 1000);
+                    }
+                });
+        }
+
+        document.getElementById('editUserSelect').addEventListener('change', async (e) => {
+            const userId = e.target.value;
+            const editError = document.getElementById('editError');
+            if (!userId) {
+                document.getElementById('editName').value = '';
+                document.getElementById('editSurname').value = '';
+                document.getElementById('editUsername').value = '';
+                document.getElementById('editPassword').value = '';
+                document.getElementById('editNumber').value = '';
+                return;
+            }
+            try {
+                const response = await fetch(`/api/user/${userId}`);
+                if (!response.ok) {
+                    const text = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${text}`);
+                }
+                const user = await response.json();
+                document.getElementById('editName').value = user.name || '';
+                document.getElementById('editSurname').value = user.surname || '';
+                document.getElementById('editUsername').value = user.username;
+                document.getElementById('editPassword').value = '';
+                document.getElementById('editNumber').value = user.number;
+                editError.style.display = 'none';
+            } catch (error) {
+                console.error('Error fetching user:', error);
+                const errorMessage = error.message.includes('401') ? 'Токен недействителен. Пожалуйста, войдите снова.' :
+                              error.message.includes('404') ? 'Пользователь не найден.' :
+                              'Ошибка загрузки данных пользователя: ' + error.message;
+                editError.textContent = errorMessage;
+                editError.style.display = 'block';
+                if (error.message.includes('401')) {
+                    localStorage.removeItem('token');
+                    setTimeout(() => window.location.href = '/login.html', 1000);
+                }
+            }
+        });
+
+        document.getElementById('registerForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const name = document.getElementById('name').value;
+            const surname = document.getElementById('surname').value;
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const number = document.getElementById('number').value;
+            const errorMessage = document.getElementById('registerError');
+            try {
+                const response = await fetch('/api/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, surname, username, password, number })
+                });
+                if (!response.ok) {
+                    const text = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${text}`);
+                }
+                const data = await response.json();
+                if (data.success) {
+                    alert('Пользователь успешно зарегистрирован!');
+                    document.getElementById('registerForm').reset();
+                    loadUsers();
+                    errorMessage.style.display = 'none';
+                } else {
+                    errorMessage.textContent = data.error || 'Ошибка регистрации';
+                    errorMessage.style.display = 'block';
+                }
+            } catch (error) {
+                console.error('Registration error:', error);
+                const errorMessageText = error.message.includes('401') ? 'Токен недействителен. Пожалуйста, войдите снова.' :
+                                 error.message.includes('403') ? 'Доступ запрещён: требуется роль администратора.' :
+                                 'Ошибка регистрации: ' + error.message;
+                errorMessage.textContent = errorMessageText;
+                errorMessage.style.display = 'block';
+                if (error.message.includes('401')) {
+                    localStorage.removeItem('token');
+                    setTimeout(() => window.location.href = '/login.html', 1000);
+                }
+            }
+        });
+
+        document.getElementById('editUserForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const userId = document.getElementById('editUserSelect').value;
+            const name = document.getElementById('editName').value;
+            const surname = document.getElementById('editSurname').value;
+            const username = document.getElementById('editUsername').value;
+            const password = document.getElementById('editPassword').value;
+            const number = document.getElementById('editNumber').value;
+            const errorMessage = document.getElementById('editError');
+            if (!userId) {
+                errorMessage.textContent = 'Выберите сотрудника для редактирования';
+                errorMessage.style.display = 'block';
+                return;
+            }
+            try {
+                const response = await fetch(`/api/user/${userId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, surname, username, password, number })
+                });
+                if (!response.ok) {
+                    const text = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${text}`);
+                }
+                const data = await response.json();
+                if (data.success) {
+                    alert('Пользователь успешно обновлён!');
+                    document.getElementById('editUserForm').reset();
+                    document.getElementById('editUserSelect').value = '';
+                    loadUsers();
+                    errorMessage.style.display = 'none';
+                } else {
+                    errorMessage.textContent = data.error || 'Ошибка обновления';
+                    errorMessage.style.display = 'block';
+                }
+            } catch (error) {
+                console.error('Update error:', error);
+                const errorMessageText = error.message.includes('401') ? 'Токен недействителен. Пожалуйста, войдите снова.' :
+                                 error.message.includes('403') ? 'Доступ запрещён: требуется роль администратора.' :
+                                 error.message.includes('404') ? 'Пользователь не найден.' :
+                                 'Ошибка обновления: ' + error.message;
+                errorMessage.textContent = errorMessageText;
+                errorMessage.style.display = 'block';
+                if (error.message.includes('401')) {
+                    localStorage.removeItem('token');
+                    setTimeout(() => window.location.href = '/login.html', 1000);
+                }
+            }
+        });
+
+        async function deleteUser(userId) {
+            if (!confirm('Вы уверены, что хотите удалить этого пользователя?')) return;
+            const errorMessage = document.getElementById('editError');
+            try {
+                const response = await fetch(`/api/user/${userId}`, {
+                    method: 'DELETE'
+                });
+                if (!response.ok) {
+                    const text = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${text}`);
+                }
+                const data = await response.json();
+                if (data.success) {
+                    alert('Пользователь успешно удалён!');
+                    loadUsers();
+                    errorMessage.style.display = 'none';
+                } else {
+                    errorMessage.textContent = data.error || 'Ошибка удаления';
+                    errorMessage.style.display = 'block';
+                }
+            } catch (error) {
+                console.error('Delete error:', error);
+                const errorMessageText = error.message.includes('401') ? 'Токен недействителен. Пожалуйста, войдите снова.' :
+                                 error.message.includes('403') ? 'Невозможно удалить: защищённый пользователь или недостаточно прав.' :
+                                 error.message.includes('404') ? 'Пользователь не найден.' :
+                                 'Ошибка удаления: ' + error.message;
+                errorMessage.textContent = errorMessageText;
+                errorMessage.style.display = 'block';
+                if (error.message.includes('401')) {
+                    localStorage.removeItem('token');
+                    setTimeout(() => window.location.href = '/login.html', 1000);
+                }
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,22 @@
+{
+  "name": "corporate-portal",
+  "version": "1.0.0",
+  "description": "Corporate portal for task management",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "bcrypt": "^5.1.1",
+    "content-disposition": "^0.5.4",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^1.4.5-lts.2",
+    "sqlite3": "^5.1.7"
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "nodemon": "^3.1.9"
+  }
+}

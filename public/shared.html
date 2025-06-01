@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Общий доступ</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="styles/shared_style.css">
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="sidebar">
+            <a href="indexmain.html">Главная</a>
+            <a href="files.html">Мои файлы</a>
+            <a href="photos.html">Фото</a>
+            <a href="shared.html" class="active">Общий доступ</a>
+        </div>
+        <div class="content">
+            <h1>Общий доступ</h1>
+            <div class="create-folder">
+                <input type="text" id="search-input" class="form-control d-inline-block w-auto" placeholder="Поиск файлов">
+            </div>
+            <div class="file-list">
+                <h3>Общие файлы</h3>
+                <div id="file-list"></div>
+            </div>
+        </div>
+    </div>
+    <footer>
+        © 2025 Корпоративный портал управления. Все права защищены.<br>
+        Доступ разрешён только сотрудникам организации.
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let sortState = {
+            filename: 'default',
+            format: 'default',
+            size: 'default',
+            author: 'default',
+            date: 'desc' // Изначально сортировка по дате (от новых к старым)
+        };
+        let currentSortField = 'date';
+        let displayedFiles = new Set(); // Множество для отслеживания отображаемых файлов
+
+        const formatOrder = ['.doc', '.docx', '.ppt', '.pptx', '.xls', '.xlsx', '.7z', '.rar', '.rtf', '.txt', '.jpg', '.jpeg', '.png', '.gif'];
+
+        // Загрузка списка всех файлов (общих)
+async function loadSharedFiles(search = '') {
+    const token = localStorage.getItem('token');
+    if (!token) {
+        console.error('Токен авторизации отсутствует');
+        console.log('Ошибка: отсутствует токен авторизации');
+        return;
+    }
+    const params = new URLSearchParams();
+    if (search) params.append('search', search);
+    const url = `/api/shared-files?${params.toString()}`; // Изменено с /api/files на /api/shared-files
+    try {
+        const filesResponse = await fetch(url, {
+            headers: { 'Authorization': `Bearer ${token}` },
+        });
+        if (!filesResponse.ok) {
+            const errorText = await filesResponse.text();
+            console.error(`Ошибка HTTP: ${filesResponse.status} - ${errorText}`);
+            if (filesResponse.status === 404) {
+                document.getElementById('file-list').innerHTML = '<div class="no-files">Эндпоинт /api/shared-files не настроен. Обратитесь к администратору.</div>';
+            } else {
+                throw new Error(`Статус: ${filesResponse.status}`);
+            }
+            return;
+        }
+        const files = await filesResponse.json();
+
+        // Отображение списка
+        const fileList = document.getElementById('file-list');
+        fileList.innerHTML = ''; // Очищаем список полностью
+        displayedFiles.clear(); // Очищаем множество отображаемых файлов
+
+        // Добавляем строку заголовков с сортировкой
+        const headerDiv = document.createElement('div');
+        headerDiv.className = 'file-item header';
+        headerDiv.innerHTML = `
+            <span onclick="sortFiles('filename')">Имя файла <span class="sort-indicator" id="sort-filename"></span></span>
+            <span onclick="sortFiles('format')">Формат <span class="sort-indicator" id="sort-format"></span></span>
+            <span onclick="sortFiles('size')">Размер <span class="sort-indicator" id="sort-size"></span></span>
+            <span onclick="sortFiles('author')">Автор <span class="sort-indicator" id="sort-author"></span></span>
+            <span onclick="sortFiles('date')">Дата <span class="sort-indicator" id="sort-date"></span></span>
+            <span>Действия</span>
+        `;
+        fileList.appendChild(headerDiv);
+
+        // Показ файлов
+        if (files.length === 0) {
+            fileList.innerHTML = '<div class="no-files">Нет общих файлов для отображения.</div>';
+        } else {
+            let sortedFiles = [...files];
+            sortFiles('date', sortedFiles); // Изначальная сортировка по дате
+            sortedFiles.forEach(file => {
+                const fileKey = `${file.id}-${file.filename}`; // Уникальный ключ для файла
+                if (displayedFiles.has(fileKey)) return; // Пропускаем, если файл уже отображен
+                displayedFiles.add(fileKey); // Добавляем в множество отображаемых
+
+                const div = document.createElement('div');
+                div.className = 'file-item';
+                div.innerHTML = `
+                    <img src="./icons/some-file.svg" alt="File Icon" width="15" height="15">
+                    <span class="filename" data-file-id="${file.id}">${file.filename}</span>
+                    <span>${file.format.toUpperCase()}</span>
+                    <span>${(file.size / 1024 / 1024).toFixed(2)} МБ</span>
+                    <span>${file.uploaded_by}</span>
+                    <span>${new Date(file.uploaded_at).toLocaleString()}</span>
+                    <button class="btn btn-sm btn-primary" onclick="downloadFile(${file.id})">Скачать</button>
+                `;
+                fileList.appendChild(div);
+            });
+        }
+    } catch (err) {
+        console.error('Ошибка загрузки общих файлов:', err.message);
+        if (!document.getElementById('file-list').innerHTML) {
+            document.getElementById('file-list').innerHTML = '<div class="no-files">Ошибка загрузки файлов. Подробности в консоли.</div>';
+        }
+    }
+}
+
+        // Скачивание файла
+        async function downloadFile(fileId) {
+            const token = localStorage.getItem('token');
+            try {
+                const response = await fetch(`/api/download/${fileId}`, {
+                    headers: { 'Authorization': `Bearer ${token}` },
+                });
+                if (!response.ok) {
+                    const error = await response.json();
+                    console.log(error.error || 'Ошибка скачивания файла');
+                    return;
+                }
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = response.headers.get('content-disposition')?.match(/filename="(.+)"/)?.[1] || 'file';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+            } catch (err) {
+                console.error('Ошибка скачивания: ' + err.message);
+            }
+        }
+
+        // Сортировка файлов
+        function sortFiles(field, fileList) {
+            if (!fileList) return; // Проверка на наличие списка файлов
+
+            // Обновляем состояние сортировки
+            if (currentSortField !== field) {
+                sortState[field] = 'asc';
+                currentSortField = field;
+            } else {
+                // Ротация: default -> asc -> desc -> default
+                if (sortState[field] === 'default') {
+                    sortState[field] = 'asc';
+                } else if (sortState[field] === 'asc') {
+                    sortState[field] = 'desc';
+                } else if (sortState[field] === 'desc') {
+                    sortState[field] = 'default';
+                }
+            }
+
+            // Сбрасываем индикаторы сортировки
+            document.getElementById('sort-filename').textContent = '';
+            document.getElementById('sort-format').textContent = '';
+            document.getElementById('sort-size').textContent = '';
+            document.getElementById('sort-author').textContent = '';
+            document.getElementById('sort-date').textContent = '';
+
+            // Устанавливаем индикатор для текущего поля
+            if (sortState[field] === 'asc') {
+                document.getElementById(`sort-${field}`).textContent = '↑';
+            } else if (sortState[field] === 'desc') {
+                document.getElementById(`sort-${field}`).textContent = '↓';
+            }
+
+            // Сортируем файлы
+            if (sortState[field] !== 'default') {
+                if (field === 'filename') {
+                    fileList.sort((a, b) => {
+                        const comparison = a.filename.localeCompare(b.filename);
+                        return sortState[field] === 'asc' ? comparison : -comparison;
+                    });
+                } else if (field === 'format') {
+                    fileList.sort((a, b) => {
+                        const indexA = formatOrder.indexOf(a.format.toLowerCase());
+                        const indexB = formatOrder.indexOf(b.format.toLowerCase());
+                        const posA = indexA === -1 ? formatOrder.length : indexA;
+                        const posB = indexB === -1 ? formatOrder.length : indexB;
+                        const comparison = posA - posB;
+                        return sortState[field] === 'asc' ? comparison : -comparison;
+                    });
+                } else if (field === 'size') {
+                    fileList.sort((a, b) => {
+                        const comparison = a.size - b.size;
+                        return sortState[field] === 'asc' ? comparison : -comparison;
+                    });
+                } else if (field === 'author') {
+                    fileList.sort((a, b) => {
+                        const comparison = a.uploaded_by.localeCompare(b.uploaded_by);
+                        return sortState[field] === 'asc' ? comparison : -comparison;
+                    });
+                } else if (field === 'date') {
+                    fileList.sort((a, b) => {
+                        const dateA = new Date(a.uploaded_at);
+                        const dateB = new Date(b.uploaded_at);
+                        const comparison = dateA - dateB;
+                        return sortState[field] === 'asc' ? comparison : -comparison;
+                    });
+                }
+            }
+
+            // Перерисовываем файлы
+            const fileListElement = document.getElementById('file-list');
+            const header = fileListElement.querySelector('.header');
+            fileListElement.innerHTML = '';
+            fileListElement.appendChild(header);
+            displayedFiles.clear(); // Очищаем множество перед перерисовкой
+            fileList.forEach(file => {
+                const fileKey = `${file.id}-${file.filename}`; // Уникальный ключ для файла
+                if (displayedFiles.has(fileKey)) return; // Пропускаем, если файл уже отображен
+                displayedFiles.add(fileKey); // Добавляем в множество отображаемых
+
+                const div = document.createElement('div');
+                div.className = 'file-item';
+                div.innerHTML = `
+                    <img src="./icons/some-file.svg" alt="File Icon" width="15" height="15">
+                    <span class="filename" data-file-id="${file.id}">${file.filename}</span>
+                    <span>${file.format.toUpperCase()}</span>
+                    <span>${(file.size / 1024 / 1024).toFixed(2)} МБ</span>
+                    <span>${file.uploaded_by}</span>
+                    <span>${new Date(file.uploaded_at).toLocaleString()}</span>
+                    <button class="btn btn-sm btn-primary" onclick="downloadFile(${file.id})">Скачать</button>
+                `;
+                fileListElement.appendChild(div);
+            });
+        }
+
+        // Поиск по файлам
+        let searchTimeout;
+        document.getElementById('search-input').addEventListener('input', (e) => {
+            clearTimeout(searchTimeout);
+            const search = e.target.value.trim();
+            searchTimeout = setTimeout(() => {
+                loadSharedFiles(search);
+            }, 300); // Задержка 300 мс для предотвращения частых запросов
+        });
+
+        // Инициализация
+        loadSharedFiles();
+    </script>
+</body>
+</html>

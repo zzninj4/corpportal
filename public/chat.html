@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Чат - Корпоративный портал</title>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles/chat_style.css">
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <img src="/public/icons/logo.png" class="logo-png45" alt="Logo">
+            <div class="header-text">
+                <h2>Панель управления</h2>
+                <h1>Чат</h1>
+                <p>Корпоративный чат</p>
+            </div>
+            <div class="user-menu" id="userMenu">
+                <div class="user-avatar" id="userAvatar"></div>
+                <div class="user-name" id="userName"></div>
+                <a href="#" class="logout-button" onclick="logout(event)">Выйти</a>
+            </div>
+        </div>
+    </header>
+    <nav>
+        <ul id="navList">
+            <li><a href="/indexmain.html"><img src="/public/icons/home2.png" alt="Home Icon" style="width: 20px; height: 20px; vertical-align: middle; margin-right: 8px;">Главная</a></li>
+            <li><a href="/files.html"><img src="/public/icons/doc.png" alt="Files Icon" style="width: 20px; height: 20px; vertical-align: middle; margin-right: 8px;">Файловый менеджер</a></li>
+            <li><a href="/chat.html"><img src="/public/icons/chat.png" alt="Chat Icon" style="width: 20px; height: 20px; vertical-align: middle; margin-right: 8px;">Чат</a></li>
+            <li id="adminLink"><a href="/admin.html"><img src="/public/icons/admin.png" alt="Admin Icon" style="width: 20px; height: 20px; vertical-align: middle; margin-right: 8px;">Админ-панель</a></li>
+        </ul>
+    </nav>
+    <div class="container">
+        <div class="sidebar">
+            <button class="add-user-btn" onclick="openAddUserModal()">+ Новый чат</button>
+            <button class="add-group-btn" onclick="openCreateGroupModal()">+ Новая группа</button>
+            <ul id="userList"></ul>
+            <ul id="groupList"></ul>
+        </div>
+        <div class="chat-area">
+            <div class="chat-header">
+                <h2 id="chatRecipient">Выберите собеседника или группу</h2>
+            </div>
+            <div class="messages" id="messages"></div>
+            <p class="error" id="chatError"></p>
+            <form class="message-input" id="messageForm">
+                <input type="text" id="message" name="message" placeholder="Введите сообщение" required>
+                <button type="submit"><img src="/public/icons/message-send.png" alt="Send Icon"></button>
+            </form>
+        </div>
+    </div>
+    <div class="modal" id="addUserModal">
+        <div class="modal-content">
+            <div class="close-btn" onclick="closeAddUserModal()">×</div>
+            <h3>Поиск нового пользователя системы</h3>
+            <input type="text" id="userSearch" placeholder="Поиск по имени или фамилии">
+            <ul id="modalUserList"></ul>
+        </div>
+    </div>
+    <div class="modal" id="createGroupModal">
+        <div class="modal-content">
+            <div class="close-btn" onclick="closeCreateGroupModal()">×</div>
+            <h3>Создать групповой чат</h3>
+            <input type="text" id="groupName" placeholder="Название группы" required>
+            <input type="text" id="groupMemberSearch" placeholder="Поиск участников">
+            <ul id="groupMemberList"></ul>
+            <div id="selectedMembers"></div>
+            <button class="btn" onclick="createGroupChat()">Создать группу</button>
+        </div>
+    </div>
+    <div class="modal" id="attachFileModal">
+        <div class="modal-content">
+            <div class="close-btn" onclick="closeAttachFileModal()">×</div>
+            <h3>Прикрепить файл</h3>
+            <input type="text" id="fileSearchInput" placeholder="Введите имя файла" oninput="searchFiles()">
+            <ul id="fileSearchResults"></ul>
+            <button class="btn" id="confirmFileSelection" disabled onclick="confirmFileSelection()">Подтвердить выбор</button>
+        </div>
+    </div>
+    <footer>
+        <p>© 2025 Корпоративный портал управления. Все права защищены.</p>
+        <p>Доступ разрешён только сотрудникам организации.</p>
+    </footer>
+    <script>
+        let selectedFileId = null;
+        let fileMetadata = {}; // Храним метаданные файлов (имя, формат)
+
+        function openAttachFileModal() {
+            const modal = document.getElementById('attachFileModal');
+            const fileSearchInput = document.getElementById('fileSearchInput');
+            const fileSearchResults = document.getElementById('fileSearchResults');
+            const confirmButton = document.getElementById('confirmFileSelection');
+            modal.style.display = 'flex';
+            fileSearchInput.value = '';
+            fileSearchResults.innerHTML = '';
+            confirmButton.disabled = true;
+            selectedFileId = null;
+            fileMetadata = {};
+        }
+
+        function closeAttachFileModal() {
+            document.getElementById('attachFileModal').style.display = 'none';
+        }
+
+        function searchFiles() {
+            const query = document.getElementById('fileSearchInput').value;
+            const fileSearchResults = document.getElementById('fileSearchResults');
+            const confirmButton = document.getElementById('confirmFileSelection');
+            fileSearchResults.innerHTML = '';
+            if (!query) return;
+            fetch(`/api/search-files?name=${encodeURIComponent(query)}`)
+                .then(response => response.json())
+                .then(files => {
+                    if (files.length === 0) {
+                        fileSearchResults.innerHTML = '<li>Файлы не найдены</li>';
+                        return;
+                    }
+                    files.forEach(file => {
+                        const li = document.createElement('li');
+                        li.textContent = `${file.filename} (${file.format}, ${(file.size / 1024 / 1024).toFixed(2)} МБ)`;
+                        li.dataset.fileId = file.id;
+                        li.addEventListener('click', () => {
+                            selectedFileId = file.id;
+                            fileMetadata[selectedFileId] = { filename: file.filename, format: file.format }; // Сохраняем метаданные
+                            fileSearchResults.querySelectorAll('li').forEach(item => item.style.backgroundColor = '');
+                            li.style.backgroundColor = '#e6f0fa';
+                            confirmButton.disabled = false;
+                        });
+                        fileSearchResults.appendChild(li);
+                    });
+                })
+                .catch(error => {
+                    console.error('Ошибка поиска файлов:', error);
+                    fileSearchResults.innerHTML = '<li>Ошибка поиска</li>';
+                });
+        }
+
+        function confirmFileSelection() {
+            if (!selectedFileId) return;
+            closeAttachFileModal();
+            const messageInput = document.getElementById('message');
+            const message = messageInput.value.trim() || `[Файл: ${fileMetadata[selectedFileId]?.filename || 'Неизвестный файл'}]`; // Добавляем название файла, если текста нет
+            sendMessageWithFile(message, selectedFileId);
+            messageInput.value = '';
+        }
+
+        // Перехват fetch для добавления токена
+        const originalFetch = window.fetch;
+        window.fetch = async (url, options = {}) => {
+            const token = localStorage.getItem('token');
+            console.log('Fetch:', url, 'Token:', token ? 'Present' : 'Absent');
+            const headers = { ...options.headers, ...(token && { Authorization: `Bearer ${token}` }) };
+            return originalFetch(url, { ...options, headers });
+        };
+
+        let currentRecipientId = null;
+        let currentGroupId = null;
+        let currentUser = null;
+        let currentUserId = null;
+        let allUsers = [];
+        let selectedGroupMembers = [];
+        let pollingInterval = null;
+        let isAdmin = false;
+
+        function getDisplayName(user) {
+            if (user.id === currentUserId) {
+                return 'Заметки';
+            }
+            const parts = [];
+            if (user.name) parts.push(user.name);
+            if (user.surname) parts.push(user.surname);
+            return parts.length > 0 ? parts.join(' ') : user.username;
+        }
+
+        window.onload = async () => {
+            const token = localStorage.getItem('token');
+            if (!token) {
+                console.error('Токен отсутствует, перенаправление на login.html');
+                setTimeout(() => window.location.href = '/login.html', 1000);
+                return;
+            }
+            try {
+                await displayUserInfo();
+                await checkAdminStatus();
+                document.getElementById('userMenu').addEventListener('click', (event) => {
+                    if (event.target.classList.contains('logout-button')) return;
+                    window.location.href = './profile.html';
+                });
+                startPolling();
+            } catch (error) {
+                console.error('Ошибка при загрузке страницы:', error.message);
+                setTimeout(() => window.location.href = '/login.html', 1000);
+            }
+        };
+
+        async function displayUserInfo() {
+            const token = localStorage.getItem('token');
+            if (!token) throw new Error('Токен отсутствует');
+            try {
+                const response = await fetch('/api/user');
+                if (!response.ok) throw new Error(`Ошибка /api/user: HTTP ${response.status}`);
+                const data = await response.json();
+                document.getElementById('userAvatar').textContent = data.username.charAt(0).toUpperCase();
+                document.getElementById('userName').textContent = data.username;
+                currentUser = data.username;
+                currentUserId = data.id;
+                return currentUser;
+            } catch (error) {
+                console.error('Ошибка в displayUserInfo:', error.message);
+                localStorage.removeItem('token');
+                throw error;
+            }
+        }
+
+        async function checkAdminStatus() {
+            try {
+                const response = await fetch('/api/check-admin');
+                console.log('checkAdminStatus response:', response.status, response.statusText);
+                if (response.ok) {
+                    isAdmin = true;
+                    console.log('Пользователь является админом');
+                    document.querySelectorAll('.delete-chat-btn').forEach(btn => {
+                        btn.style.display = 'inline';
+                    });
+                    document.getElementById('adminLink').style.display = 'block';
+                } else {
+                    isAdmin = false;
+                    console.log('Пользователь не админ, статус:', response.status);
+                    document.getElementById('adminLink').style.display = 'none';
+                }
+            } catch (error) {
+                console.error('Ошибка проверки статуса админа:', error.message);
+                isAdmin = false;
+                document.getElementById('adminLink').style.display = 'none';
+            }
+            await loadChats();
+        }
+
+        async function loadChats() {
+            if (!currentUserId) throw new Error('currentUserId не установлен');
+            try {
+                const userResponse = await fetch('/api/users');
+                if (!userResponse.ok) throw new Error(`Ошибка /api/users: HTTP ${userResponse.status}`);
+                allUsers = await userResponse.json();
+                console.log('allUsers:', allUsers);
+                
+                const groupResponse = await fetch('/api/group-chats');
+                if (!groupResponse.ok) throw new Error(`Ошибка /api/group-chats: HTTP ${groupResponse.status}`);
+                const groups = await groupResponse.json();
+                
+                const chatUsers = new Set();
+                const messagesResponse = await fetch('/api/messages?with=*');
+                if (messagesResponse.ok) {
+                    const messages = await messagesResponse.json();
+                    messages.forEach(msg => {
+                        if (msg.from_user_id !== currentUserId && msg.to_user_id === currentUserId) {
+                            chatUsers.add(msg.from_user_id);
+                        } else if (msg.to_user_id !== currentUserId && msg.from_user_id === currentUserId) {
+                            chatUsers.add(msg.to_user_id);
+                        }
+                    });
+                } else if (messagesResponse.status !== 400) {
+                    throw new Error(`Ошибка /api/messages?with=*: HTTP ${messagesResponse.status}`);
+                }
+                
+                const userList = document.getElementById('userList');
+                const groupList = document.getElementById('groupList');
+                userList.innerHTML = '';
+                groupList.innerHTML = '';
+                
+                const noteLi = document.createElement('li');
+                noteLi.innerHTML = `
+                    Заметки
+                    <span class="unread-count" id="unread-${currentUserId}" style="display:none"></span>
+                `;
+                noteLi.dataset.userId = currentUserId;
+                noteLi.addEventListener('click', (e) => {
+                    if (!e.target.classList.contains('delete-chat-btn')) selectRecipient(currentUserId);
+                });
+                if (currentRecipientId === currentUserId) noteLi.classList.add('active');
+                userList.appendChild(noteLi);
+                
+                chatUsers.forEach(userId => {
+                    if (userId !== currentUserId) {
+                        const user = allUsers.find(u => u.id === userId);
+                        if (user) {
+                            const li = document.createElement('li');
+                            li.dataset.userId = user.id;
+                            li.innerHTML = `
+                                ${getDisplayName(user)}
+                                <span class="unread-count" id="unread-${user.id}" style="display:none"></span>
+                                <span class="delete-chat-btn" onclick="deleteChat('user', ${user.id})" style="display:${isAdmin ? 'inline' : 'none'}">×</span>
+                            `;
+                            li.addEventListener('click', (e) => {
+                                if (!e.target.classList.contains('delete-chat-btn')) selectRecipient(user.id);
+                            });
+                            if (currentRecipientId === user.id) li.classList.add('active');
+                            userList.appendChild(li);
+                        }
+                    }
+                });
+                
+                groups.forEach(group => {
+                    const li = document.createElement('li');
+                    li.dataset.groupId = group.id;
+                    li.innerHTML = `
+                        ${group.name}
+                        <span class="unread-count" id="unread-group-${group.id}" style="display:none"></span>
+                        <span class="delete-chat-btn" onclick="deleteChat('group', ${group.id})" style="display:${isAdmin ? 'inline' : 'none'}">×</span>
+                    `;
+                    li.addEventListener('click', (e) => {
+                        if (!e.target.classList.contains('delete-chat-btn')) selectGroup(group.id, group.name);
+                    });
+                    if (currentGroupId == group.id) li.classList.add('active');
+                    groupList.appendChild(li);
+                });
+                
+                await loadUnreadMessages();
+            } catch (error) {
+                console.error('Ошибка загрузки чатов:', error);
+                document.getElementById('chatError').textContent = error.message.includes('401') ?
+                    'Токен недействителен. Пожалуйста, войдите снова.' :
+                    'Ошибка загрузки чатов: ' + error.message;
+                document.getElementById('chatError').style.display = 'block';
+                if (error.message.includes('401')) {
+                    localStorage.removeItem('token');
+                    setTimeout(() => window.location.href = '/login.html', 1000);
+                }
+            }
+        }
+
+        async function deleteChat(type, id) {
+            if (!isAdmin) {
+                alert('Только администратор может удалять чаты');
+                return;
+            }
+            if (!confirm(`Вы уверены, что хотите удалить ${type === 'user' ? 'чат с пользователем' : 'групповой чат'}?`)) {
+                return;
+            }
+            try {
+                const response = await fetch('/api/delete-chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(type === 'user' ? { user_id: id } : { group_id: id })
+                });
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const data = await response.json();
+                if (data.success) {
+                    if (type === 'user' && currentRecipientId === id || type === 'group' && currentGroupId == id) {
+                        currentRecipientId = null;
+                        currentGroupId = null;
+                        document.getElementById('chatRecipient').textContent = 'Выберите собеседника или группу';
+                        document.getElementById('messages').innerHTML = '<div class="no-messages">Выберите собеседника или группу</div>';
+                    }
+                    await loadChats();
+                } else {
+                    alert(data.error || 'Ошибка удаления чата');
+                }
+            } catch (error) {
+                console.error('Ошибка удаления чата:', error);
+                alert('Ошибка удаления чата: ' + error.message);
+            }
+        }
+
+        async function loadUnreadMessages() {
+            try {
+                const response = await fetch('/api/unread-messages');
+                if (!response.ok) throw new Error(`Ошибка /api/unread-messages: HTTP ${response.status}`);
+                const { personal, group } = await response.json();
+                
+                allUsers.forEach(user => {
+                    const countEl = document.getElementById(`unread-${user.id}`);
+                    if (countEl) {
+                        const unread = personal.find(u => u.from_user_id === user.id);
+                        countEl.textContent = unread ? unread.count : '';
+                        countEl.style.display = unread && unread.count > 0 ? 'flex' : 'none';
+                    }
+                });
+                
+                document.querySelectorAll('[data-group-id]').forEach(el => {
+                    const groupId = el.dataset.groupId;
+                    const countEl = document.getElementById(`unread-group-${groupId}`);
+                    const unread = group.find(g => g.group_id == groupId);
+                    countEl.textContent = unread ? unread.count : '';
+                    countEl.style.display = unread && unread.count > 0 ? 'flex' : 'none';
+                });
+            } catch (error) {
+                console.error('Ошибка загрузки непрочитанных сообщений:', error);
+            }
+        }
+
+        async function selectRecipient(userId) {
+            currentRecipientId = userId;
+            currentGroupId = null;
+            const userItems = document.querySelectorAll('.sidebar li');
+            userItems.forEach(item => item.classList.remove('active'));
+            const selectedItem = document.querySelector(`.sidebar li[data-user-id="${userId}"]`);
+            if (selectedItem) selectedItem.classList.add('active');
+            const selectedUser = allUsers.find(user => user.id === userId);
+            document.getElementById('chatRecipient').textContent = selectedUser ? getDisplayName(selectedUser) : 'Пользователь';
+            await loadMessages();
+        }
+
+        async function selectGroup(groupId, groupName) {
+            currentRecipientId = null;
+            currentGroupId = groupId;
+            const userItems = document.querySelectorAll('.sidebar li');
+            userItems.forEach(item => item.classList.remove('active'));
+            const selectedItem = document.querySelector(`.sidebar li[data-group-id="${groupId}"]`);
+            if (selectedItem) selectedItem.classList.add('active');
+            document.getElementById('chatRecipient').textContent = groupName;
+            await loadMessages();
+        }
+
+        async function loadMessages() {
+            const messagesDiv = document.getElementById('messages');
+            messagesDiv.innerHTML = '';
+            if (!currentRecipientId && !currentGroupId) {
+                messagesDiv.innerHTML = '<div class="no-messages">Выберите собеседника или группу</div>';
+                return;
+            }
+            try {
+                const url = currentRecipientId ?
+                    `/api/messages?with=${currentRecipientId}` :
+                    `/api/messages?group_id=${currentGroupId}`;
+                const response = await fetch(url);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const messages = await response.json();
+                if (messages.length === 0) {
+                    const messageText = currentRecipientId === currentUserId ?
+                        'Вы еще не оставляли себе заметок' :
+                        'Вы ещё никому и ничего не написали';
+                    messagesDiv.innerHTML = `<div class="no-messages">${messageText}</div>`;
+                    return;
+                }
+
+                // Получаем метаданные всех прикреплённых файлов
+                const fileIds = messages
+                    .filter(msg => msg.attached_file_id)
+                    .map(msg => msg.attached_file_id);
+                let fileMetadataMap = {};
+                if (fileIds.length > 0) {
+                    const fileMetadataResponse = await fetch(`/api/files-by-ids?ids=${fileIds.join(',')}`);
+                    if (fileMetadataResponse.ok) {
+                        const files = await fileMetadataResponse.json();
+                        console.log('Метаданные файлов:', files); // Логирование для проверки
+                        files.forEach(file => {
+                            fileMetadataMap[file.id] = { filename: file.filename, format: file.format };
+                        });
+                    } else {
+                        console.error('Ошибка загрузки метаданных файлов:', fileMetadataResponse.status);
+                    }
+                }
+
+                messages.forEach(msg => {
+                    const bubble = document.createElement('div');
+                    bubble.classList.add('message-bubble');
+                    bubble.classList.add(msg.from_user_id === currentUserId ? 'sent' : 'received');
+                    const status = msg.from_user_id === currentUserId ?
+                        (msg.is_read ? '✓✓' : '✓') : '';
+                    let messageContent = msg.message ? `<div>${msg.message}</div>` : ''; // Показываем текст сообщения, только если он есть
+                    if (msg.attached_file_id) {
+                        const fileInfo = fileMetadataMap[msg.attached_file_id] || fileMetadata[msg.attached_file_id] || { filename: `Файл ${msg.attached_file_id}`, format: 'unknown' };
+                        const isImage = ['jpg', 'jpeg', 'png', 'gif'].includes(fileInfo.format.toLowerCase());
+                        let fileDisplay = '';
+                        if (isImage) {
+                            fileDisplay = `
+                                <div style="margin-top: 5px;">
+                                    <img src="/api/public/preview/${msg.attached_file_id}" alt="${fileInfo.filename}" style="max-width: 200px; max-height: 200px; border-radius: 5px;" onerror="this.src='/public/icons/fallback_image.jpg';" />
+                                    <div style="margin-top: 5px;">
+                                        <a href="/api/download/${msg.attached_file_id}" class="text-blue-500 hover:underline">Скачать</a>
+                                    </div>
+                                </div>
+                            `;
+                        } else {
+                            fileDisplay = `
+                                <div style="margin-top: 5px; display: flex; align-items: center;">
+                                    <img src="/public/icons/file-icon.png" alt="File Icon" style="width: 20px; height: 20px; margin-right: 5px;" />
+                                    <span>${fileInfo.filename} (${fileInfo.format})</span>
+                                </div>
+                                <div>
+                                    <a href="/files.html?highlight=${msg.attached_file_id}" class="text-green-500 hover:underline">Просмотреть в БД</a> | 
+                                    <a href="/api/download/${msg.attached_file_id}" class="text-blue-500 hover:underline">Скачать</a>
+                                </div>
+                            `;
+                        }
+                        messageContent += fileDisplay;
+                    }
+                    // Если нет текста сообщения и нет файла, показываем заглшку
+                    if (!messageContent) {
+                        messageContent = '<div>[Сообщение с файлом]</div>';
+                    }
+                    bubble.innerHTML = `
+                        ${messageContent}
+                        <div class="timestamp">${msg.timestamp}</div>
+                        <div class="message-status">${status}</div>
+                    `;
+                    messagesDiv.appendChild(bubble);
+                });
+                messagesDiv.scrollTop = messagesDiv.scrollHeight;
+                document.getElementById('chatError').style.display = 'none';
+                await loadUnreadMessages();
+            } catch (error) {
+                console.error('Ошибка загрузки сообщений:', error);
+                document.getElementById('chatError').textContent = error.message.includes('401') ?
+                    'Токен недействителен. Пожалуйста, войдите снова.' :
+                    'Ошибка загрузки сообщений: ' + error.message;
+                document.getElementById('chatError').style.display = 'block';
+                if (error.message.includes('401')) {
+                    localStorage.removeItem('token');
+                    setTimeout(() => window.location.href = '/login.html', 1000);
+                }
+            }
+        }
+
+        function openAddUserModal() {
+            const modal = document.getElementById('addUserModal');
+            const modalUserList = document.getElementById('modalUserList');
+            const searchInput = document.getElementById('userSearch');
+            modal.style.display = 'flex';
+            modalUserList.innerHTML = '';
+            searchInput.value = '';
+            allUsers.forEach(user => {
+                if (user.id !== currentUserId) {
+                    const li = document.createElement('li');
+                    li.textContent = getDisplayName(user);
+                    li.dataset.userId = user.id;
+                    li.addEventListener('click', () => {
+                        selectRecipient(user.id);
+                        closeAddUserModal();
+                    });
+                    modalUserList.appendChild(li);
+                }
+            });
+            searchInput.focus();
+        }
+
+        function closeAddUserModal() {
+            document.getElementById('addUserModal').style.display = 'none';
+        }
+
+        function openCreateGroupModal() {
+            const modal = document.getElementById('createGroupModal');
+            const modalUserList = document.getElementById('groupMemberList');
+            const searchInput = document.getElementById('groupMemberSearch');
+            const selectedMembersDiv = document.getElementById('selectedMembers');
+            modal.style.display = 'flex';
+            modalUserList.innerHTML = '';
+            searchInput.value = '';
+            selectedMembersDiv.innerHTML = '';
+            selectedGroupMembers = [];
+            allUsers.forEach(user => {
+                if (user.id !== currentUserId) {
+                    const li = document.createElement('li');
+                    li.textContent = getDisplayName(user);
+                    li.dataset.userId = user.id;
+                    li.addEventListener('click', () => toggleGroupMember(user.id, li));
+                    modalUserList.appendChild(li);
+                }
+            });
+            searchInput.focus();
+        }
+
+        function toggleGroupMember(userId, li) {
+            if (selectedGroupMembers.includes(userId)) {
+                selectedGroupMembers = selectedGroupMembers.filter(m => m !== userId);
+                li.style.backgroundColor = '';
+            } else if (selectedGroupMembers.length < 99) {
+                selectedGroupMembers.push(userId);
+                li.style.backgroundColor = '#e6f0fa';
+            }
+            const selectedMembersDiv = document.getElementById('selectedMembers');
+            selectedMembersDiv.textContent = `Выбрано: ${selectedGroupMembers.map(id => 
+                getDisplayName(allUsers.find(u => u.id === id))).join(', ')}`;
+        }
+
+        async function createGroupChat() {
+            const groupName = document.getElementById('groupName').value;
+            if (!groupName) {
+                alert('Введите название группы');
+                return;
+            }
+            if (selectedGroupMembers.length < 1) {
+                alert('Выберите хотя бы одного участника');
+                return;
+            }
+            try {
+                const response = await fetch('/api/group-chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        name: groupName, 
+                        member_ids: selectedGroupMembers
+                    })
+                });
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const data = await response.json();
+                if (data.success) {
+                    closeCreateGroupModal();
+                    await loadChats();
+                } else {
+                    alert(data.error || 'Ошибка создания группы');
+                }
+            } catch (error) {
+                console.error('Ошибка создания группы:', error);
+                alert('Ошибка создания группы: ' + error.message);
+            }
+        }
+
+        function closeCreateGroupModal() {
+            document.getElementById('createGroupModal').style.display = 'none';
+        }
+
+        document.getElementById('userSearch').addEventListener('input', (e) => {
+            const query = e.target.value.toLowerCase();
+            const modalUserList = document.getElementById('modalUserList');
+            modalUserList.innerHTML = '';
+            allUsers.forEach(user => {
+                if (user.id !== currentUserId) {
+                    const displayName = getDisplayName(user).toLowerCase();
+                    if (displayName.includes(query)) {
+                        const li = document.createElement('li');
+                        li.textContent = getDisplayName(user);
+                        li.dataset.userId = user.id;
+                        li.addEventListener('click', () => {
+                            selectRecipient(user.id);
+                            closeAddUserModal();
+                        });
+                        modalUserList.appendChild(li);
+                    }
+                }
+            });
+        });
+
+        document.getElementById('groupMemberSearch').addEventListener('input', (e) => {
+            const query = e.target.value.toLowerCase();
+            const modalUserList = document.getElementById('groupMemberList');
+            modalUserList.innerHTML = '';
+            allUsers.forEach(user => {
+                if (user.id !== currentUserId) {
+                    const displayName = getDisplayName(user).toLowerCase();
+                    if (displayName.includes(query)) {
+                        const li = document.createElement('li');
+                        li.textContent = getDisplayName(user);
+                        li.dataset.userId = user.id;
+                        li.style.backgroundColor = selectedGroupMembers.includes(user.id) ? '#e6f0fa' : '';
+                        li.addEventListener('click', () => toggleGroupMember(user.id, li));
+                        modalUserList.appendChild(li);
+                    }
+                }
+            });
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeAddUserModal();
+                closeCreateGroupModal();
+                closeAttachFileModal();
+            }
+        });
+
+        function logout(event) {
+            event.stopPropagation();
+            localStorage.removeItem('token');
+            window.location.href = '/login.html';
+        }
+
+        async function sendMessageWithFile(message, attachedFileId = null) {
+            const errorMessage = document.getElementById('chatError');
+            if (!currentRecipientId && !currentGroupId) {
+                errorMessage.textContent = 'Выберите получателя или группу';
+                errorMessage.style.display = 'block';
+                return;
+            }
+            // Убеждаемся, что message не пустой
+            const finalMessage = message || (attachedFileId ? `[Файл прикреплён: ID ${attachedFileId}]` : 'Сообщение без текста');
+            try {
+                const now = new Date();
+                const timestamp = now.getFullYear() + '-' +
+                                 String(now.getMonth() + 1).padStart(2, '0') + '-' +
+                                 String(now.getDate()).padStart(2, '0') + ' ' +
+                                 String(now.getHours()).padStart(2, '0') + ':' +
+                                 String(now.getMinutes()).padStart(2, '0');
+                const body = currentRecipientId ?
+                    { to_user_id: currentRecipientId, message: finalMessage, timestamp, attached_file_id: attachedFileId || null } :
+                    { group_id: currentGroupId, message: finalMessage, timestamp, attached_file_id: attachedFileId || null };
+                const response = await fetch('/api/message', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(`HTTP ${response.status}: ${errorData.error || 'Ошибка отправки сообщения'}`);
+                }
+                const data = await response.json();
+                if (data.success) {
+                    document.getElementById('message').value = '';
+                    errorMessage.style.display = 'none';
+                    await loadMessages();
+                    await loadChats();
+                } else {
+                    errorMessage.textContent = data.error || 'Ошибка отправки сообщения';
+                    errorMessage.style.display = 'block';
+                }
+            } catch (error) {
+                console.error('Ошибка отправки сообщения:', error);
+                errorMessage.textContent = error.message.includes('401') ?
+                    'Токен недействителен. Пожалуйста, войдите снова.' :
+                    'Ошибка отправки сообщения: ' + error.message;
+                errorMessage.style.display = 'block';
+                if (error.message.includes('401')) {
+                    localStorage.removeItem('token');
+                    setTimeout(() => window.location.href = '/login.html', 1000);
+                }
+            }
+        }
+
+        document.getElementById('messageForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const message = document.getElementById('message').value;
+            await sendMessageWithFile(message);
+        });
+
+        function startPolling() {
+            if (!pollingInterval) {
+                pollingInterval = setInterval(async () => {
+                    await loadChats();
+                    if (currentRecipientId || currentGroupId) await loadMessages();
+                }, 10000);
+                console.log('Начато периодическое обновление чатов и сообщений');
+            }
+        }
+
+        function stopPolling() {
+            if (pollingInterval) {
+                clearInterval(pollingInterval);
+                pollingInterval = null;
+                console.log('Остановлено периодическое обновление чатов и сообщений');
+            }
+        }
+
+        window.addEventListener('unload', stopPolling);
+    </script>
+</body>
+</html>

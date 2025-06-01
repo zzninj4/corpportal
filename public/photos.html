@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Фото</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="styles/photos_style.css">
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="sidebar">
+            <a href="indexmain.html">Главная</a>
+            <a href="files.html">Мои файлы</a>
+            <a href="photos.html" class="active">Фото</a>
+            <a href="shared.html">Общий доступ</a>
+        </div>
+        <div class="content">
+            <h1>Фото</h1>
+            <div class="create-folder">
+                <input type="text" id="search-input" class="form-control d-inline-block w-auto" placeholder="Поиск фото">
+                <button class="btn btn-primary" onclick="document.getElementById('file-input').click()">Загрузить</button>
+            </div>
+            <div class="dropzone" id="dropzone">
+                <input type="file" id="file-input" style="display: none;" accept=".jpg,.jpeg,.png,.gif">
+            </div>
+            <div class="photo-grid" id="photo-grid"></div>
+        </div>
+    </div>
+    <div class="modal fade" id="photoModal" tabindex="-1" aria-labelledby="photoModalLabel" aria-hidden="true">
+        <div class="modal-dialog custom-modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="photoModalLabel">Просмотр фото</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+                </div>
+                <div class="modal-body">
+                    <img id="modalImage" class="modal-img" src="" alt="Фото">
+                </div>
+            </div>
+        </div>
+    </div>
+    <footer>
+        © 2025 Корпоративный портал управления. Все права защищены.<br>
+        Доступ разрешён только сотрудникам организации.
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let sortState = {
+            filename: 'default',
+            date: 'desc'
+        };
+        let currentSortField = 'date';
+
+        const dropzone = document.getElementById('dropzone');
+        dropzone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropzone.classList.add('dragover');
+        });
+        dropzone.addEventListener('dragleave', () => {
+            dropzone.classList.remove('dragover');
+        });
+        dropzone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropzone.classList.remove('dragover');
+            const file = e.dataTransfer.files[0];
+            if (file) uploadFile(file);
+        });
+
+        document.getElementById('file-input').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                uploadFile(file);
+                document.getElementById('file-input').value = '';
+            }
+        });
+
+        async function uploadFile(file) {
+            const filename = prompt('Введите название фото (минимум 3 символа):');
+            if (!filename) {
+                alert('Название фото обязательно');
+                return;
+            }
+            if (filename.length < 3) {
+                alert('Имя фото должно быть минимум 3 символа');
+                return;
+            }
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('filename', filename);
+            const token = localStorage.getItem('token');
+            if (!token) {
+                alert('Ошибка: вы не авторизованы. Пожалуйста, войдите в систему.');
+                return;
+            }
+            try {
+                const response = await fetch('/api/upload', {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${token}` },
+                    body: formData,
+                });
+                const result = await response.json();
+                if (result.success) {
+                    alert('Фото успешно загружено');
+                    loadPhotos();
+                } else {
+                    alert('Ошибка: ' + (result.error || 'Не удалось загрузить фото'));
+                }
+            } catch (err) {
+                alert('Ошибка сервера: ' + err.message);
+            }
+        }
+
+        function openPhoto(photoId, filename) {
+            const modalImage = document.getElementById('modalImage');
+            modalImage.src = `/api/public/preview/${photoId}`;
+            modalImage.alt = filename;
+            document.getElementById('photoModalLabel').textContent = filename;
+            const modal = new bootstrap.Modal(document.getElementById('photoModal'));
+            modal.show();
+        }
+
+        async function loadPhotos(search = '') {
+            const token = localStorage.getItem('token');
+            if (!token) {
+                alert('Ошибка: вы не авторизованы. Пожалуйста, войдите в систему.');
+                document.getElementById('photo-grid').innerHTML = '<div class="no-files">Вы не авторизованы. Войдите, чтобы увидеть фото.</div>';
+                return;
+            }
+            const params = new URLSearchParams();
+            if (search) params.append('search', search);
+            const url = `/api/files?${params.toString()}`;
+            try {
+                const filesResponse = await fetch(url, {
+                    headers: { 'Authorization': `Bearer ${token}` },
+                });
+                if (!filesResponse.ok) {
+                    if (filesResponse.status === 401) {
+                        alert('Ошибка 401: Доступ запрещён. Проверьте авторизацию.');
+                        document.getElementById('photo-grid').innerHTML = '<div class="no-files">Ошибка авторизации. Войдите заново.</div>';
+                        return;
+                    }
+                    throw new Error(`Ошибка загрузки фото: ${filesResponse.status}`);
+                }
+                const files = await filesResponse.json();
+                console.log('Полученные файлы:', files);
+
+                const photos = files.filter(file => ['jpg', 'jpeg', 'png', 'gif'].includes(file.format.toLowerCase()));
+                console.log('Отфильтрованные фото:', photos);
+
+                const photoGrid = document.getElementById('photo-grid');
+                photoGrid.innerHTML = '';
+
+                if (photos.length === 0) {
+                    photoGrid.innerHTML = '<div class="no-files">Нет фото для отображения.</div>';
+                } else {
+                    let sortedPhotos = [...photos];
+                    sortPhotos('date', sortedPhotos);
+                    sortedPhotos.forEach(photo => {
+                        if (!photo.id) {
+                            console.error('Некорректный ID фото:', photo);
+                            return;
+                        }
+                        const div = document.createElement('div');
+                        div.className = 'photo-item';
+                        div.innerHTML = `
+                            <img src="/api/public/preview/${photo.id}" alt="${photo.filename}" 
+                                 onclick="openPhoto(${photo.id}, '${photo.filename}')"
+                                 onerror="this.src='/public/icons/fallback_image.jpg'; console.error('Ошибка загрузки изображения ID ${photo.id}:', this.src)">
+                            <span>${photo.filename}</span>
+                            <div class="button-container">
+                                <button class="btn btn-sm btn-primary" onclick="downloadPhoto(${photo.id})">Скачать</button>
+                                <button class="btn btn-sm btn-danger" onclick="deletePhoto(${photo.id})">Удалить</button>
+                            </div>
+                        `;
+                        photoGrid.appendChild(div);
+                    });
+                }
+            } catch (err) {
+                console.error('Ошибка загрузки фото:', err.message);
+                alert('Ошибка загрузки списка фото: ' + err.message);
+                document.getElementById('photo-grid').innerHTML = '<div class="no-files">Ошибка загрузки фото.</div>';
+            }
+        }
+
+        async function downloadPhoto(photoId) {
+            const token = localStorage.getItem('token');
+            if (!token) {
+                alert('Ошибка: вы не авторизованы. Пожалуйста, войдите в систему.');
+                return;
+            }
+            try {
+                const response = await fetch(`/api/download/${photoId}`, {
+                    headers: { 'Authorization': `Bearer ${token}` },
+                });
+                if (!response.ok) throw new Error(`Ошибка скачивания фото: ${response.status}`);
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = response.headers.get('content-disposition')?.match(/filename="(.+)"/)?.[1] || 'photo';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+            } catch (err) {
+                alert('Ошибка скачивания: ' + err.message);
+            }
+        }
+
+        async function deletePhoto(photoId) {
+            if (!confirm('Вы уверены, что хотите удалить фото?')) return;
+            const token = localStorage.getItem('token');
+            if (!token) {
+                alert('Ошибка: вы не авторизованы. Пожалуйста, войдите в систему.');
+                return;
+            }
+            try {
+                const response = await fetch(`/api/file/${photoId}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${token}` },
+                });
+                const result = await response.json();
+                if (result.success) {
+                    alert('Фото успешно удалено');
+                    loadPhotos();
+                } else {
+                    alert('Ошибка: ' + (result.error || 'Не удалось удалить фото'));
+                }
+            } catch (err) {
+                alert('Ошибка сервера: ' + err.message);
+            }
+        }
+
+        function sortPhotos(field, photoList) {
+            if (!photoList) return;
+
+            if (currentSortField !== field) {
+                sortState[field] = 'asc';
+                currentSortField = field;
+            } else {
+                if (sortState[field] === 'default') sortState[field] = 'asc';
+                else if (sortState[field] === 'asc') sortState[field] = 'desc';
+                else sortState[field] = 'default';
+            }
+
+            if (sortState[field] !== 'default') {
+                if (field === 'filename') {
+                    photoList.sort((a, b) => {
+                        const comparison = a.filename.localeCompare(b.filename);
+                        return sortState[field] === 'asc' ? comparison : -comparison;
+                    });
+                } else if (field === 'date') {
+                    photoList.sort((a, b) => {
+                        const dateA = new Date(a.uploaded_at);
+                        const dateB = new Date(b.uploaded_at);
+                        const comparison = dateA - dateB;
+                        return sortState[field] === 'asc' ? comparison : -comparison;
+                    });
+                }
+            }
+        }
+
+        document.getElementById('search-input').addEventListener('input', (e) => {
+            const search = e.target.value.trim();
+            loadPhotos(search);
+        });
+
+        loadPhotos();
+    </script>
+</body>
+</html>

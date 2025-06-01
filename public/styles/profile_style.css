@@ -1,0 +1,151 @@
+        body {
+            font-family: 'Montserrat', sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f9;
+            color: #333;
+        }
+        header {
+            background-color: #931320;
+            color: #fff;
+            padding: 1rem 0;
+            text-align: center;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .header-content {
+            width: 100%;
+            max-width: 1200px;
+            margin: 0 auto;
+            position: relative;
+            padding: 0 1rem;
+        }
+        .header-text {
+            margin: 0;
+            padding: 0 20px;
+        }
+        .header-text h1 {
+            font-size: 1.8rem;
+            margin: .5rem 0;
+        }
+        .header-text h2 {
+            font-size: 1.4rem;
+            color: #fae10c;
+            margin: .2rem 0;
+            z-index: 10;
+        }
+        .header-text p {
+            font-size: 1rem;
+            margin: 0;
+        }
+        nav {
+            background-color: #7a0f1a;
+            padding: .5rem;
+        }
+        nav ul {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+        }
+        nav ul li {
+            margin: 0 1rem;
+        }
+        nav ul li a {
+            color: #fff;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: .9rem;
+        }
+        nav ul li a:hover {
+            color: #fae10c;
+        }
+        .container {
+            background-color: #fff;
+            width: 100%;
+            max-width: 1200px;
+            margin: 2rem auto;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,.1);
+        }
+        .profile-card {
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,.1);
+            padding: 2rem;
+            width: 100%;
+            max-width: 500px;
+            text-align: center;
+            margin: 0 auto;
+        }
+        .profile-card h1 {
+            color: #931320;
+            font-size: 1.6rem;
+            margin-bottom: 1rem;
+        }
+        .profile-card p {
+            font-size: 1rem;
+            color: #333;
+            margin: .5rem 0;
+        }
+        .error {
+            color: red;
+            display: none;
+            margin: 1rem;
+        }
+        footer {
+            background-color: #7a0f1a;
+            color: #fff;
+            padding: 1rem;
+            text-align: center;
+            width: 100%;
+        }
+        .logo-png45 {
+            position: absolute;
+            left: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            height: 90px;
+            z-index: 5;
+        }
+        .user-menu {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            cursor: pointer;
+            z-index: 5;
+        }
+        .user-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background-color: #fae10c;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            color: #333;
+        }
+        .user-name {
+            margin-top: 5px;
+            color: #fff;
+            font-size: 14px;
+            text-align: center;
+        }
+        .logout-button {
+            margin-top: 5px;
+            color: #fae10c;
+            font-size: 12px;
+            text-decoration: none;
+        }
+        .logout-button:hover {
+            text-decoration: underline;
+        }

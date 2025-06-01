@@ -1,0 +1,107 @@
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f7f7f7;
+            margin: 0;
+            overflow-x: hidden;
+        }
+        .container-fluid {
+            max-width: 100%;
+            padding: 0;
+        }
+        .sidebar {
+            width: 250px;
+            background-color: #ffffff;
+            height: 100vh;
+            position: fixed;
+            top: 0;
+            left: 0;
+            padding-top: 20px;
+            border-right: 1px solid #e0e0e0;
+        }
+        .sidebar a {
+            display: block;
+            padding: 10px 20px;
+            color: #333;
+            text-decoration: none;
+            font-size: 16px;
+        }
+        .sidebar a:hover {
+            background-color: gray;
+            color: #ffffff;
+        }
+        .sidebar a.active {
+            background-color: #7a0f1a;
+            color: #ffffff;
+        }
+        .content {
+            margin-left: 250px;
+            padding: 20px;
+        }
+        .file-list {
+            background-color: #ffffff;
+            border-radius: 8px;
+            padding: 20px;
+        }
+        .file-item {
+            display: flex;
+            align-items: center;
+            padding: 10px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        .file-item img {
+            width: 15px;
+            height: 15px;
+            margin-right: 10px;
+        }
+        .file-item span {
+            flex-grow: 1;
+            margin-right: 10px;
+        }
+        .file-item button {
+            margin-left: 10px;
+        }
+        .create-folder {
+            margin-bottom: 20px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        footer {
+            margin-top: 20px;
+            text-align: center;
+            color: #666;
+            font-size: 14px;
+            margin-left: 250px;
+            padding: 20px;
+        }
+        .header {
+            font-weight: bold;
+            background-color: #7a0f1a;
+            color: #fff;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+        .header span {
+            flex-grow: 1;
+            margin-right: 10px;
+        }
+        .sort-indicator {
+            margin-left: 5px;
+            font-size: 0.8rem;
+        }
+                .btn.btn-primary {
+            background-color: #7a0f1a;
+            border-color: #7a0f1a;
+        }
+        .btn.btn-primary:hover {
+            background-color: #5d0c14;
+            border-color: #5d0c14;
+        }
+        @media (max-width: 768px) {
+            .sidebar {
+                width: 200px;
+            }
+            .content, footer {
+                margin-left: 200px;
+            }
+        }

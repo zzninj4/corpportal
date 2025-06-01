@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Главная - Корпоративный портал</title>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles/indexmain_style.css">
+</head>
+<body>
+<header>
+    <div class="header-content">
+        <img src="/public/icons/logo.png" class="logo-png45">
+        <div class="header-text">
+            <h1>Корпоративный портал</h1>
+            <p>Добро пожаловать в систему управления</p>
+        </div>
+        <div class="user-menu" id="userMenu">
+            <div class="user-avatar" id="userAvatar"></div>
+            <div class="user-name" id="userName"></div>
+            <a href="#" class="logout-button" onclick="logout(event)">Выйти</a>
+        </div>
+    </div>
+</header>
+    <nav>
+        <ul id="navList">
+            <li><a href="/indexmain.html"><img src="./public/icons/home2.png" alt="" style="width: 20px; height: 20px; vertical-align: middle; margin-right: 8px;">Главная</a></li>
+            <li><a href="/files.html"><img src="/public/icons/doc.png" alt="" style="width: 20px; height: 20px; vertical-align: middle; margin-right: 8px;">Файловый менеджер</a></li>
+            <li><a href="/chat.html"><img src="/public/icons/chat.png" alt="" style="width: 20px; height: 20px; vertical-align: middle; margin-right: 8px;">Чат</a></li>
+        </ul>
+    </nav>
+    <div class="container">
+        <!-- Карточка 1: Файловый менеджер -->
+        <div class="card">
+            <h2>Файловый менеджер</h2>
+            <p>Управляйте своими документами, загружайте и скачивайте файлы.</p>
+            <a href="/files.html" class="btn">Перейти</a>
+        </div>
+        <!-- Карточка 2: Чат -->
+        <div class="card">
+            <h2>Чат</h2>
+            <p>Общайтесь с коллегами в реальном времени.</p>
+            <a href="/chat.html" class="btn">Перейти</a>
+        </div>
+        <!-- Карточка 3: В разработке -->
+        <div class="card">
+            <h2>В разработке</h2>
+            <p>Эта функция находится в стадии разработки.</p>
+            <button class="btn btn-disabled" onclick="showUnderDevelopment()">Перейти</button>
+        </div>
+    </div>
+    <footer>
+        <p>© 2025 Корпоративный портал управления. Все права защищены.</p>
+        <p>Доступ разрешён только сотрудникам организации.</p>
+    </footer>
+<script>
+    // Перехват fetch для добавления токена
+    const originalFetch = window.fetch;
+    window.fetch = async (url, options = {}) => {
+        const token = localStorage.getItem('token');
+        const headers = { ...options.headers, ...(token && { Authorization: `Bearer ${token}` }) };
+        return originalFetch(url, { ...options, headers });
+    };
+
+    window.onload = async () => {
+        const token = localStorage.getItem('token');
+        if (!token) {
+            console.error('Токен отсутствует, перенаправление на login.html');
+            setTimeout(() => window.location.href = '/login.html', 2000);
+            return;
+        }
+        try {
+            await displayUserInfo();
+            await checkAdminAccess();
+            await loadRecipients(); // Загружаем список получателей
+            await loadMessages(); // Загружаем сообщения
+            document.getElementById('userMenu').addEventListener('click', (event) => {
+                if (event.target.classList.contains('logout-button')) return;
+                window.location.href = './profile.html';
+            });
+            // Привязываем обработчик к кнопке отправки сообщения
+            const sendButton = document.getElementById('send-message');
+            if (sendButton) {
+                sendButton.addEventListener('click', sendMessage);
+            } else {
+                console.warn('Кнопка отправки сообщения (send-message) не найдена');
+            }
+        } catch (error) {
+            console.error('Ошибка при загрузке страницы:', error);
+            if (error.message.includes('401')) {
+                localStorage.removeItem('token');
+                setTimeout(() => window.location.href = '/login.html', 2000);
+            } else {
+                alert('Ошибка загрузки данных: ' + error.message);
+            }
+        }
+    };
+
+    async function displayUserInfo() {
+        const userAvatar = document.getElementById('userAvatar');
+        const userName = document.getElementById('userName');
+        try {
+            const response = await fetch('/api/user');
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(`HTTP ${response.status}: ${errorData.error || 'Ошибка сервера'}`);
+            }
+            const data = await response.json();
+            userAvatar.textContent = data.username.split(' ').map(word => word[0]).join('').slice(0, 2);
+            userName.textContent = data.username;
+            console.log('Информация о пользователе загружена:', data.username);
+        } catch (error) {
+            console.error('Ошибка в displayUserInfo:', error);
+            throw error;
+        }
+    }
+
+    async function checkAdminAccess() {
+        try {
+            const response = await fetch('/api/check-admin');
+            if (response.ok) {
+                const adminLink = document.createElement('li');
+                adminLink.innerHTML = `
+                    <a href="./admin.html">
+                        <img src="/public/icons/admin.png" alt="Admin Icon" style="width: 20px; height: 20px; vertical-align: middle; margin-right: 8px;">
+                        Админ-панель
+                    </a>
+                `;
+                document.getElementById('navList').appendChild(adminLink);
+                console.log('Админ-панель добавлена в навигацию с иконкой');
+            }
+        } catch (error) {
+            console.error('Ошибка в checkAdminAccess:', error);
+        }
+    }
+
+    async function loadRecipients() {
+        const recipientSelect = document.getElementById('recipient-select');
+        if (!recipientSelect) {
+            console.warn('Элемент recipient-select не найден');
+            return;
+        }
+        try {
+            const response = await fetch('/api/users');
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(`HTTP ${response.status}: ${errorData.error || 'Ошибка получения пользователей'}`);
+            }
+            const users = await response.json();
+            recipientSelect.innerHTML = '<option value="">Выберите получателя</option>';
+            users.forEach(user => {
+                const option = document.createElement('option');
+                option.value = user.username;
+                option.textContent = user.username;
+                recipientSelect.appendChild(option);
+            });
+            console.log('Список получателей загружен:', users.map(user => user.username));
+        } catch (error) {
+            console.error('Ошибка загрузки получателей:', error);
+            alert('Ошибка загрузки списка пользователей: ' + error.message);
+        }
+    }
+
+    async function loadMessages(recipient = 'ivan') { // По умолчанию загружаем для пользователя 'ivan'
+        const chatMessages = document.getElementById('chat-messages');
+        if (!chatMessages) {
+            console.warn('Элемент chat-messages не найден');
+            return;
+        }
+        try {
+            const response = await fetch(`/api/messages?with=${recipient}`);
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(`HTTP ${response.status}: ${errorData.error || 'Ошибка загрузки сообщений'}`);
+            }
+            const messages = await response.json();
+            chatMessages.innerHTML = '';
+            messages.forEach(msg => {
+                const messageElement = document.createElement('div');
+                messageElement.textContent = `${msg.from_username}: ${msg.message} (${msg.timestamp})`;
+                chatMessages.appendChild(messageElement);
+            });
+            console.log(`Загружено ${messages.length} сообщений для ${recipient}`);
+        } catch (error) {
+            console.error('Ошибка загрузки сообщений:', error.message);
+            alert('Ошибка загрузки сообщений: ' + error.message);
+        }
+    }
+
+    async function sendMessage() {
+        const messageInput = document.getElementById('message-input');
+        const recipientSelect = document.getElementById('recipient-select');
+        const message = messageInput ? messageInput.value.trim() : '';
+        const to_user_id = recipientSelect ? recipientSelect.value : '';
+        const timestamp = new Date().toISOString().slice(0, 19).replace('T', ' ');
+
+        if (!message) {
+            alert('Введите сообщение');
+            return;
+        }
+        if (!to_user_id) {
+            alert('Выберите получателя');
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/message', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ to_user_id, message, timestamp })
+            });
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.error || 'Ошибка отправки сообщения');
+            }
+            console.log('Сообщение отправлено:', data);
+            messageInput.value = ''; // Очищаем поле ввода
+            await loadMessages(to_user_id); // Обновляем сообщения
+        } catch (error) {
+            console.error('Ошибка отправки сообщения:', error.message);
+            alert('Ошибка отправки сообщения: ' + error.message);
+        }
+    }
+
+    function logout(event) {
+        event.stopPropagation();
+        localStorage.removeItem('token');
+        window.location.href = '/login.html';
+    }
+
+    function showUnderDevelopment() {
+        alert('Эта функция находится в разработке');
+    }
+</script>
+</body>
+</html>

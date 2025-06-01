@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Мои файлы</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="styles/files_style.css">
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="sidebar">
+            <a href="indexmain.html">Главная</a>
+            <a href="files.html" class="active">Мои файлы</a>
+            <a href="photos.html">Фото</a>
+            <a href="shared.html">Общий доступ</a>
+        </div>
+        <div class="content">
+            <h1>Мои файлы</h1>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb" id="breadcrumb">
+                    <li class="breadcrumb-item"><a href="#" onclick="loadFiles(null)">Главная</a></li>
+                </ol>
+            </nav>
+            <div class="create-folder">
+                <input type="text" id="folder-name" class="form-control d-inline-block w-auto" placeholder="Название папки или поиск">
+                <button class="btn btn-primary" id="createFolderBtn" style="display: none;">Создать папку</button>
+                <button class="btn btn-primary" onclick="document.getElementById('file-input').click()">Загрузить</button>
+            </div>
+            <div class="dropzone" id="dropzone">
+                <input type="file" id="file-input" style="display: none;" accept=".doc,.docx,.ppt,.pptx,.xls,.xlsx,.rtf,.txt,.7z,.zip,.rar">
+            </div>
+            <div class="file-list">
+                <h3>Ваши файлы и папки</h3>
+                <div id="file-list"></div>
+            </div>
+        </div>
+    </div>
+    <footer>
+        © 2025 Корпоративный портал управления. Все права защищены.<br>
+        Доступ разрешён только сотрудникам организации.
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let currentFolderId = null;
+        let breadcrumbHistory = [{ id: null, name: 'Главная' }];
+        let renameTimeout;
+        let folders = [];
+        let filesInFolders = {};
+        let displayedFiles = new Set(); // Множество для отслеживания отображаемых файлов
+
+        // Drag-and-drop
+        const dropzone = document.getElementById('dropzone');
+        dropzone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropzone.classList.add('dragover');
+        });
+        dropzone.addEventListener('dragleave', () => {
+            dropzone.classList.remove('dragover');
+        });
+        dropzone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropzone.classList.remove('dragover');
+            const file = e.dataTransfer.files[0];
+            if (file) uploadFile(file);
+        });
+
+        // Загрузка файла
+        document.getElementById('file-input').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                uploadFile(file);
+                document.getElementById('file-input').value = ''; // Очистка поля после выбора
+            }
+        });
+
+        async function uploadFile(file) {
+            const filename = prompt('Введите название файла (минимум 3 символа):');
+            if (!filename || filename.length < 3) {
+                console.log('Имя файла должно быть минимум 3 символа');
+                return;
+            }
+
+            const folderId = document.getElementById('folder-select')?.value;
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('filename', filename);
+            if (folderId) formData.append('folder_id', folderId);
+            const token = localStorage.getItem('token');
+            try {
+                const response = await fetch('/api/upload', {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${token}` },
+                    body: formData,
+                });
+                const result = await response.json();
+                if (result.success) {
+                    console.log('Файл успешно загружен');
+                    loadFiles(currentFolderId); // Обновляем список файлов
+                    if (folderId) {
+                        filesInFolders[folderId] = filesInFolders[folderId] || [];
+                        filesInFolders[folderId].push({ id: result.fileId, filename, format: file.name.split('.').pop() });
+                        if (filesInFolders[folderId].length > 10) filesInFolders[folderId].pop();
+                    }
+                } else {
+                    console.error(result.error || 'Ошибка загрузки файла');
+                }
+            } catch (err) {
+                console.error('Ошибка сервера: ' + err.message);
+            }
+        }
+
+        // Создание папки
+        document.getElementById('createFolderBtn').addEventListener('click', async () => {
+            const name = document.getElementById('folder-name').value.trim();
+            if (!name) {
+                console.log('Введите название папки');
+                return;
+            }
+            const token = localStorage.getItem('token');
+            try {
+                const response = await fetch('/api/folder', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({ name }),
+                });
+                const result = await response.json();
+                if (result.success) {
+                    console.log('Папка создана');
+                    document.getElementById('folder-name').value = '';
+                    const newFolder = { id: result.folderId, name, files: [], created_by: 'Пользователь', created_at: new Date().toISOString() };
+                    folders.push(newFolder);
+                    loadFolders();
+                    loadFiles(currentFolderId);
+                    renderFolder(newFolder.id);
+                } else {
+                    console.error(result.error || 'Ошибка создания папки');
+                }
+            } catch (err) {
+                console.error('Ошибка сервера: ' + err.message);
+            }
+        });
+
+        // Отрисовка папки
+        function renderFolder(folderId) {
+            const fileList = document.getElementById('file-list');
+            const folder = folders.find(f => f.id === folderId);
+            if (!folder) return;
+
+            const folderDiv = document.createElement('div');
+            folderDiv.className = 'file-item folder';
+            folderDiv.innerHTML = `
+                <img src="/public/icons/folder.png" alt="Folder" onerror="this.src='/public/icons/default.png'">
+                <span class="folder-name" data-folder-id="${folder.id}">${folder.name}</span>
+                <span>-</span>
+                <span>-</span>
+                <span>${folder.created_by}</span>
+                <span>${new Date(folder.created_at).toLocaleString()}</span>
+                <button class="btn btn-sm btn-primary" onclick="downloadFolder(${folder.id})">Скачать</button>
+            `;
+            fileList.appendChild(folderDiv);
+
+            let isExpanded = false;
+            const filesDiv = document.createElement('div');
+            filesDiv.style.display = 'none';
+            filesDiv.className = 'nested-files';
+            folderDiv.addEventListener('click', (e) => {
+                if (e.target.tagName !== 'BUTTON') {
+                    isExpanded = !isExpanded;
+                    filesDiv.style.display = isExpanded ? 'block' : 'none';
+                    if (isExpanded) renderFolderFiles(folderId, filesDiv);
+                }
+            });
+            fileList.appendChild(filesDiv);
+        }
+
+        // Отрисовка файлов внутри папки
+        function renderFolderFiles(folderId, container) {
+            container.innerHTML = '';
+            const folder = folders.find(f => f.id === folderId);
+            const files = filesInFolders[folderId] || [];
+            files.slice(0, 10).forEach(file => {
+                const fileDiv = document.createElement('div');
+                fileDiv.className = 'file-item';
+                fileDiv.innerHTML = `
+                    <img src="./icons/some-file.svg" alt="File Icon" width="15" height="15">
+                    <span>${file.filename}</span>
+                    <span>${file.format.toUpperCase()}</span>
+                    <span>-</span>
+                    <span>-</span>
+                    <span>-</span>
+                    <button class="btn btn-sm btn-primary" onclick="downloadFile(${file.id})">Скачать</button>
+                `;
+                container.appendChild(fileDiv);
+            });
+        }
+
+        // Загрузка списка папок
+        async function loadFolders(search = '') {
+            const token = localStorage.getItem('token');
+            try {
+                const response = await fetch(`/api/folders${search ? `?search=${encodeURIComponent(search)}` : ''}`, {
+                    headers: { 'Authorization': `Bearer ${token}` },
+                });
+                const data = await response.json();
+                folders = data;
+            } catch (err) {
+                console.error('Ошибка загрузки папок:', err);
+            }
+        }
+
+        // Загрузка списка файлов и папок
+        async function loadFiles(folderId, search = '') {
+            currentFolderId = folderId;
+            const token = localStorage.getItem('token');
+            const params = new URLSearchParams();
+            if (folderId) params.append('folder_id', folderId);
+            if (search) params.append('search', search);
+            const url = `/api/files?${params.toString()}`;
+            try {
+                const filesResponse = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
+                const files = await filesResponse.json();
+                const foldersResponse = await fetch(`/api/folders${search ? `?search=${encodeURIComponent(search)}` : ''}`, {
+                    headers: { 'Authorization': `Bearer ${token}` },
+                });
+                const foldersData = await foldersResponse.json();
+
+                updateBreadcrumb(folderId, foldersData);
+
+                const fileList = document.getElementById('file-list');
+                fileList.innerHTML = ''; // Очищаем список полностью
+                displayedFiles.clear(); // Очищаем множество отображаемых файлов
+
+                // Строка заголовков с сортировкой
+                const headerDiv = document.createElement('div');
+                headerDiv.className = 'file-item header';
+                headerDiv.innerHTML = `
+                    <span onclick="sortFiles('filename')">Имя файла <span class="sort-indicator" id="sort-filename"></span></span>
+                    <span onclick="sortFiles('format')">Формат <span class="sort-indicator" id="sort-format"></span></span>
+                    <span onclick="sortFiles('size')">Размер <span class="sort-indicator" id="sort-size"></span></span>
+                    <span onclick="sortFiles('author')">Автор <span class="sort-indicator" id="sort-author"></span></span>
+                    <span onclick="sortFiles('date')">Дата <span class="sort-indicator" id="sort-date"></span></span>
+                    <span>Действия</span>
+                `;
+                fileList.appendChild(headerDiv);
+
+                // Показ папок
+                foldersData.forEach(folder => {
+                    if (!folderId || folder.id != folderId) {
+                        renderFolder(folder.id);
+                    }
+                });
+
+                // Показ файлов
+                let sortedFiles = [...files];
+                sortFiles('date', sortedFiles);
+                sortedFiles.forEach(file => {
+                    const fileKey = `${file.id}-${file.filename}`; // Уникальный ключ для файла
+                    if (displayedFiles.has(fileKey)) return; // Пропускаем, если файл уже отображен
+                    displayedFiles.add(fileKey); // Добавляем в множество отображаемых
+
+                    const div = document.createElement('div');
+                    div.className = 'file-item';
+                    div.innerHTML = `
+                        <img src="./icons/some-file.svg" alt="File Icon" width="15" height="15">
+                        <span class="filename" data-file-id="${file.id}">${file.filename}</span>
+                        <span>${file.format.toUpperCase()}</span>
+                        <span>${(file.size / 1024 / 1024).toFixed(2)} МБ</span>
+                        <span>${file.uploaded_by}</span>
+                        <span>${new Date(file.uploaded_at).toLocaleString()}</span>
+                        <button class="btn btn-sm btn-primary" onclick="downloadFile(${file.id})">Скачать</button>
+                        <button class="btn btn-sm btn-danger" onclick="deleteFile(${file.id})">Удалить</button>
+                    `;
+                    fileList.appendChild(div);
+                });
+
+                document.querySelectorAll('.filename').forEach(span => {
+                    span.removeEventListener('click', startRename);
+                });
+            } catch (err) {
+                console.error('Ошибка загрузки файлов:', err);
+            }
+        }
+
+        // Функция для скачивания папки (заглушка)
+        async function downloadFolder(folderId) {
+            console.log(`Скачивание папки ${folderId} (реализация на сервере)`);
+        }
+
+        // Функция сортировки
+        let sortState = {
+            filename: 'default',
+            format: 'default',
+            size: 'default',
+            author: 'default',
+            date: 'desc'
+        };
+        let currentSortField = 'date';
+
+        const formatOrder = ['.doc', '.docx', '.ppt', '.pptx', '.xls', '.xlsx', '.7z', '.rar', '.rtf', '.txt'];
+
+        function sortFiles(field, fileList) {
+            if (!fileList) return;
+
+            if (currentSortField !== field) {
+                sortState[field] = 'asc';
+                currentSortField = field;
+            } else {
+                if (sortState[field] === 'default') {
+                    sortState[field] = 'asc';
+                } else if (sortState[field] === 'asc') {
+                    sortState[field] = 'desc';
+                } else if (sortState[field] === 'desc') {
+                    sortState[field] = 'default';
+                }
+            }
+
+            document.getElementById('sort-filename').textContent = '';
+            document.getElementById('sort-format').textContent = '';
+            document.getElementById('sort-size').textContent = '';
+            document.getElementById('sort-author').textContent = '';
+            document.getElementById('sort-date').textContent = '';
+
+            if (sortState[field] === 'asc') {
+                document.getElementById(`sort-${field}`).textContent = '↑';
+            } else if (sortState[field] === 'desc') {
+                document.getElementById(`sort-${field}`).textContent = '↓';
+            }
+
+            if (sortState[field] !== 'default') {
+                if (field === 'filename') {
+                    fileList.sort((a, b) => {
+                        const comparison = a.filename.localeCompare(b.filename);
+                        return sortState[field] === 'asc' ? comparison : -comparison;
+                    });
+                } else if (field === 'format') {
+                    fileList.sort((a, b) => {
+                        const indexA = formatOrder.indexOf(a.format.toLowerCase());
+                        const indexB = formatOrder.indexOf(b.format.toLowerCase());
+                        const posA = indexA === -1 ? formatOrder.length : indexA;
+                        const posB = indexB === -1 ? formatOrder.length : indexB;
+                        const comparison = posA - posB;
+                        return sortState[field] === 'asc' ? comparison : -comparison;
+                    });
+                } else if (field === 'size') {
+                    fileList.sort((a, b) => {
+                        const comparison = a.size - b.size;
+                        return sortState[field] === 'asc' ? comparison : -comparison;
+                    });
+                } else if (field === 'author') {
+                    fileList.sort((a, b) => {
+                        const comparison = a.uploaded_by.localeCompare(b.uploaded_by);
+                        return sortState[field] === 'asc' ? comparison : -comparison;
+                    });
+                } else if (field === 'date') {
+                    fileList.sort((a, b) => {
+                        const dateA = new Date(a.uploaded_at);
+                        const dateB = new Date(b.uploaded_at);
+                        const comparison = dateA - dateB;
+                        return sortState[field] === 'asc' ? comparison : -comparison;
+                    });
+                }
+            }
+
+            const fileListElement = document.getElementById('file-list');
+            const header = fileListElement.querySelector('.header');
+            const folderItems = Array.from(fileListElement.querySelectorAll('.folder, .nested-files'));
+            fileListElement.innerHTML = '';
+            fileListElement.appendChild(header);
+            folderItems.forEach(item => fileListElement.appendChild(item));
+            displayedFiles.clear(); // Очищаем перед добавлением
+            fileList.forEach(file => {
+                const fileKey = `${file.id}-${file.filename}`;
+                if (displayedFiles.has(fileKey)) return;
+                displayedFiles.add(fileKey);
+
+                const div = document.createElement('div');
+                div.className = 'file-item';
+                div.innerHTML = `
+                    <img src="./icons/some-file.svg" alt="File Icon" width="15" height="15">
+                    <span class="filename" data-file-id="${file.id}">${file.filename}</span>
+                    <span>${file.format.toUpperCase()}</span>
+                    <span>${(file.size / 1024 / 1024).toFixed(2)} МБ</span>
+                    <span>${file.uploaded_by}</span>
+                    <span>${new Date(file.uploaded_at).toLocaleString()}</span>
+                    <button class="btn btn-sm btn-primary" onclick="downloadFile(${file.id})">Скачать</button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteFile(${file.id})">Удалить</button>
+                `;
+                fileListElement.appendChild(div);
+            });
+        }
+
+        // Оставшиеся функции без изменений
+        function startRename(e) {
+            // Заглушка
+        }
+
+        // Добавляем защиту от множественных вызовов loadFiles при поиске
+        let searchTimeout;
+        document.getElementById('folder-name').addEventListener('input', (e) => {
+            clearTimeout(searchTimeout);
+            const search = e.target.value.trim();
+            searchTimeout = setTimeout(() => {
+                loadFolders(search);
+                loadFiles(currentFolderId, search);
+            }, 300); // Задержка 300 мс, чтобы не вызывать loadFiles слишком часто
+        });
+
+        function updateBreadcrumb(folderId, folders) {
+            const breadcrumb = document.getElementById('breadcrumb');
+            if (!folderId) {
+                breadcrumbHistory = [{ id: null, name: 'Главная' }];
+            } else {
+                const folder = folders.find(f => f.id == folderId);
+                if (folder && !breadcrumbHistory.find(b => b.id == folderId)) {
+                    breadcrumbHistory.push({ id: folderId, name: folder.name });
+                }
+            }
+            breadcrumb.innerHTML = breadcrumbHistory.map((item, index) => `
+                <li class="breadcrumb-item ${index === breadcrumbHistory.length - 1 ? 'active' : ''}">
+                    ${index === breadcrumbHistory.length - 1 ? item.name : `<a href="#" onclick="navigateToFolder(${item.id})">${item.name}</a>`}
+                </li>
+            `).join('');
+        }
+
+        function navigateToFolder(folderId) {
+            breadcrumbHistory = breadcrumbHistory.slice(0, breadcrumbHistory.findIndex(b => b.id === folderId) + 1);
+            loadFiles(folderId);
+        }
+
+        async function downloadFile(fileId) {
+            const token = localStorage.getItem('token');
+            try {
+                const response = await fetch(`/api/download/${fileId}`, {
+                    headers: { 'Authorization': `Bearer ${token}` },
+                });
+                if (!response.ok) {
+                    const error = await response.json();
+                    console.log(error.error || 'Ошибка скачивания файла');
+                    return;
+                }
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = response.headers.get('content-disposition')?.match(/filename="(.+)"/)?.[1] || 'file';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+            } catch (err) {
+                console.error('Ошибка скачивания: ' + err.message);
+            }
+        }
+
+        async function deleteFile(fileId) {
+            if (!confirm('Вы уверены, что хотите удалить файл?')) return;
+            const token = localStorage.getItem('token');
+            try {
+                const response = await fetch(`/api/file/${fileId}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${token}` },
+                });
+                const result = await response.json();
+                if (result.success) {
+                    console.log('Файл удалён');
+                    loadFiles(currentFolderId);
+                } else {
+                    console.error(result.error || 'Ошибка удаления файла');
+                }
+            } catch (err) {
+                console.error('Ошибка сервера: ' + err.message);
+            }
+        }
+
+        // Инициализация
+        loadFolders();
+        loadFiles(null);
+    </script>
+</body>
+</html>
